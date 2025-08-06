@@ -1,27 +1,47 @@
-// app/[sub]/login/_component/LoginPage.tsx
 import { FC } from "react";
 import './LoginPage.css';
 
 interface LoginPageProps {
-  type: string; // e.g., 'car', 'bike'
+  type: string; // 'car' | 'bike' | 'bus'
 }
 
 const LoginPage: FC<LoginPageProps> = ({ type }) => {
-  // Determine GIF, title, and button style based on the type
-  const gifSrc = type === "car" ? "/car.svg" : "/bike.svg";
-  const title = type === "car" ? "Car Login" : "Bike Login";
-  const buttonClass = type === "car" ? 'carButton' : 'bikeButton';
+  const config = {
+    car: {
+      gifSrc: "/car.svg",
+      title: "Car Login",
+      buttonClass: "carButton",
+    },
+    bike: {
+      gifSrc: "/bike.svg",
+      title: "Bike Login",
+      buttonClass: "bikeButton",
+    },
+    bus: {
+      gifSrc: "/bus.svg",
+      title: "Bus Login",
+      buttonClass: "busButton",
+    },
+  };
+
+  const fallback = {
+    gifSrc: "/bike.svg",
+    title: "Login",
+    buttonClass: "defaultButton",
+  };
+
+  const { gifSrc, title, buttonClass } = config[type as keyof typeof config] ?? fallback;
 
   return (
-    <div className={'container'} style={{ backgroundImage: `url(${gifSrc})` }}>
-      <div className={'formWrapper'}>
-        <h1 className={title}>{title}</h1>
-        <form className={'form'}>
+    <div className="container" style={{ backgroundImage: `url(${gifSrc})` }}>
+      <div className="formWrapper">
+        <h1>{title}</h1>
+        <form className="form">
           <label htmlFor="username">Username</label>
           <input id="username" type="text" />
           <label htmlFor="password">Password</label>
           <input id="password" type="password" />
-          <button type="submit" className={`${'button'} ${buttonClass}`}>
+          <button type="submit" className={`button ${buttonClass}`}>
             Login
           </button>
         </form>
