@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const allowedSubs = ["car", "bike", "bicycle"];
 const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "localhost"; // Set in production!
+console.log("🚀 ~ process.env.MAIN_DOMAIN:", process.env.MAIN_DOMAIN)
 
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get("host") || "";
+  console.log("🚀 ~ middleware ~ host:", host)
 
   // Remove port from host (e.g., localhost:3000 → localhost)
   const hostname = host.replace(/:\d+$/, "");

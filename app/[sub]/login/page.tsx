@@ -1,20 +1,11 @@
 // app/[sub]/login/page.tsx
-import { FC } from "react";
 import LoginPage from "./_component/LoginPage";
 
-interface LoginPageProps {
-  params: {
-    sub: string; // e.g., 'car', 'bike'
-  };
-}
-
-const Page: FC<LoginPageProps> = async ({ params }) => {
-  const { sub } = params;
+export default async function Page({ params }: any) {
+  const { sub } = await params;
   return (
     <div>
       <LoginPage type={sub} />
     </div>
   );
-};
-
-export default Page;
+}

@@ -1,12 +1,9 @@
 // app/[sub]/manifest/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-export function GET(
-  req: NextRequest,
-  { params }: { params: { sub: string } }
-) {
-  const { sub } = params;
-
+export async function GET(req: NextRequest, params: any) {
+  const { sub } = await params.params;
+ 
   const branding = {
     car: {
       name: "Car Dashboard",

@@ -6,9 +6,9 @@ interface LoginPageProps {
   };
 }
 
-const Page: FC<LoginPageProps> = async ({ params }) => {
-  const { sub } = params;
+export default async function Page({ params }: any) {
+  const { sub } = params.params;
   return <div>{sub}</div>;
 };
 
-export default Page;
+ 
