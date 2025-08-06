@@ -1,0 +1,69 @@
+/* app/[sub]/login/_component/LoginPage.module.css */
+.container {
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100vw;
+}
+
+.formWrapper {
+  background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white */
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+  text-align: center;
+  width: 300px; /* Fixed width for consistency */
+}
+
+.title {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  color: #333; /* Dark gray for readability */
+  font-weight: bold;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  text-align: left;
+}
+
+input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 1rem;
+}
+
+.button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: opacity 0.2s ease; /* Smooth hover effect */
+}
+
+.carButton {
+  background-color: #ff0000; /* Red for car theme */
+  color: white;
+}
+
+.bikeButton {
+  background-color: #00cc00; /* Darker green for bike theme */
+  color: white;
+}
+
+.button:hover {
+  opacity: 0.9; /* Slight fade on hover */
+}
