@@ -16,7 +16,8 @@ export default function RootLayout({
     <html lang="en">
       <head />
       <body>
-        <ServiceWorkerRegister />
+        {/* this not need */}
+        {/* <ServiceWorkerRegister /> */}
         {children}
       </body>
     </html>
