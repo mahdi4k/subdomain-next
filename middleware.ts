@@ -1,18 +1,40 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["car", "bike", "bus", "www"];
+const allowedSubs = ["car", "bike", "bus"]; // do NOT include 'www'
 const defaultLocale = "fa";
+
+/**
+ * Return the canonical main domain for the given hostname.
+ * Examples:
+ *  - "porterage.kiwipart.ir" -> "kiwipart.ir"
+ *  - "kiwipart.ir" -> "kiwipart.ir"
+ *  - "porterage.localhost" -> "localhost"
+ *  - "localhost" -> "localhost"
+ */
+function getMainDomainFromHost(hostname: string) {
+  const parts = hostname.split(".");
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+    return "localhost";
+  }
+  // if only one label (uncommon), return it
+  if (parts.length <= 1) return hostname;
+  // common case: take last two labels (example.com)
+  return parts.slice(-2).join(".");
+}
 
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const host = req.headers.get("host") || "";
-  const hostname = host.replace(/:\d+$/, "");
+  const hostHeader = req.headers.get("host") || "";
+  const [hostnameRaw, portFromHost] = hostHeader.split(":");
+  const hostname = (hostnameRaw || "").toLowerCase();
+  const port = portFromHost || "";
 
-  const hostParts = hostname.split(".");
-  const MAIN_DOMAIN = hostParts.length > 2 ? hostParts.slice(-2).join(".") : hostname;
+  // Build current absolute for loop detection
+  const parsed = new URL(req.url);
+  const currentAbsolute = `${parsed.origin}${parsed.pathname}${parsed.search || ""}`;
 
-  // Skip static files and Next.js internals
+  // Skip assets and internals
   if (
     pathname.match(/\.(.*)$/) ||
     pathname === "/sw.js" ||
@@ -23,60 +45,98 @@ export default function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Main domain handling
-  if (hostname === MAIN_DOMAIN || hostname === `www.${MAIN_DOMAIN}`) {
+  const MAIN_DOMAIN = getMainDomainFromHost(hostname);
+
+  // 1) handle www.* -> non-www (permanent)
+  if (hostname.startsWith("www.")) {
+    const target = new URL(req.url);
+    target.hostname = hostname.replace(/^www\./, "");
+    if (port) target.port = port;
+    const targetAbsolute = `${target.origin}${target.pathname}${target.search || ""}`;
+    if (currentAbsolute === targetAbsolute) return NextResponse.next();
+    return NextResponse.redirect(target, 301);
+  }
+
+  // 2) If we're on the main domain (e.g. kiwipart.ir or localhost)
+  if (hostname === MAIN_DOMAIN) {
     const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
 
-    // No locale in path, redirect to default locale
+    // If no locale prefix, redirect to default locale (so the browser URL changes)
     if (!localeMatch) {
-      req.nextUrl.pathname = `/${defaultLocale}${pathname}`;
-      return NextResponse.redirect(req.nextUrl);
+      const target = new URL(req.url);
+      // keep same host + port but add locale prefix
+      target.pathname = `/${defaultLocale}${pathname}`;
+      if (port) target.port = port;
+      const targetAbsolute = `${target.origin}${target.pathname}${target.search || ""}`;
+      if (currentAbsolute === targetAbsolute) return NextResponse.next();
+      return NextResponse.redirect(target, 302);
     }
 
+    // main domain + locale exists -> continue
     return NextResponse.next();
   }
 
-  // Extract subdomain
-  const sub = hostname.split(".")[0];
+  // 3) Not main domain -> probably a subdomain. Extract sub label.
+  const hostParts = hostname.split(".");
+  const sub = hostParts[0];
 
-  // Block disallowed subdomains
+  // If subdomain is not allowed -> strip it and redirect to main domain (default locale)
+  // e.g., foo.kiwipart.ir  ->  kiwipart.ir/fa
   if (!allowedSubs.includes(sub)) {
-    const redirectUrl = new URL(req.url);
-    redirectUrl.hostname = MAIN_DOMAIN;
-    redirectUrl.pathname = `/${defaultLocale}`;
-    redirectUrl.search = ""; // Clear any query params
-    return NextResponse.redirect(redirectUrl, 302);
+    const target = new URL(req.url);
+    // Build a full absolute URL pointing to main domain to guarantee browser updates host
+    // Use parsed.protocol to preserve http/https in dev/prod
+    const protocol = parsed.protocol; // includes trailing colon, e.g. 'http:'
+    const newOrigin = `${protocol}//${MAIN_DOMAIN}${port ? `:${port}` : ""}`;
+    const newUrl = `${newOrigin}/${defaultLocale}`;
+    if (currentAbsolute === `${newOrigin}${parsed.pathname}${parsed.search || ""}`) {
+      // already at main domain default -> no redirect
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(newUrl, 302);
   }
 
-  // Check if path has locale
+  // 4) Valid subdomain (allowedSubs) — integrate locale logic:
   const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
 
   // No locale in path
   if (!localeMatch) {
-    // Root path: redirect to /fa/login
+    // If root of subdomain, redirect browser to /{locale}/login so URL updates
     if (pathname === "/") {
-      req.nextUrl.pathname = `/${defaultLocale}/login`;
-      return NextResponse.redirect(req.nextUrl);
+      const target = new URL(req.url);
+      const protocol = parsed.protocol;
+      const newOrigin = `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+      const newUrl = `${newOrigin}/${defaultLocale}/login`;
+      if (currentAbsolute === `${newOrigin}${parsed.pathname}${parsed.search || ""}`) return NextResponse.next();
+      return NextResponse.redirect(newUrl, 302);
     }
 
-    // Other paths: rewrite to /fa/subdomain/path
+    // For non-root, rewrite internally to include sub (browser URL unchanged)
     req.nextUrl.pathname = `/${defaultLocale}/${sub}${pathname}`;
-    return NextResponse.rewrite(req.nextUrl);
+    const res = NextResponse.rewrite(req.nextUrl);
+    res.headers.set("x-subdomain", sub);
+    return res;
   }
 
-  // Has locale in path
+  // Has locale in path (e.g., /fa/...)
   const locale = localeMatch[1];
-  const pathWithoutLocale = pathname.slice(3); // Remove /fa or /en
+  const pathWithoutLocale = pathname.slice(3); // remove "/fa"
 
-  // Root of locale: redirect to login
+  // if locale root -> redirect to login (so browser shows correct URL)
   if (pathWithoutLocale === "/" || pathWithoutLocale === "") {
-    req.nextUrl.pathname = `/${locale}/login`;
-    return NextResponse.redirect(req.nextUrl);
+    const target = new URL(req.url);
+    const protocol = parsed.protocol;
+    const newOrigin = `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+    const newUrl = `${newOrigin}/${locale}/login`;
+    if (currentAbsolute === `${newOrigin}${parsed.pathname}${parsed.search || ""}`) return NextResponse.next();
+    return NextResponse.redirect(newUrl, 302);
   }
 
-  // Rewrite: /fa/dashboard → /fa/subdomain/dashboard
+  // General rewrite to include sub in path
   req.nextUrl.pathname = `/${locale}/${sub}${pathWithoutLocale}`;
-  return NextResponse.rewrite(req.nextUrl);
+  const res = NextResponse.rewrite(req.nextUrl);
+  res.headers.set("x-subdomain", sub);
+  return res;
 }
 
 export const config = {
