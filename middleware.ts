@@ -1,7 +1,7 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["porterage", "driver", "customer","www"];
+const allowedSubs = ["porterage", "driver", "customer", "www"];
 const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "kiwipart.ir";
 const locales = ["fa", "en"];
 const defaultLocale = "fa";
@@ -25,13 +25,13 @@ export default function middleware(req: NextRequest) {
   // Main domain handling
   if (hostname === MAIN_DOMAIN) {
     const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
-    
+
     // No locale in path, redirect to default locale
     if (!localeMatch) {
       req.nextUrl.pathname = `/${defaultLocale}${pathname}`;
       return NextResponse.redirect(req.nextUrl);
     }
-    
+
     return NextResponse.next();
   }
 
@@ -40,12 +40,15 @@ export default function middleware(req: NextRequest) {
 
   // Block disallowed subdomains
   if (!allowedSubs.includes(sub)) {
-    return new NextResponse("Subdomain not allowed", { status: 403 });
+    const redirectUrl = new URL(req.url);
+    redirectUrl.hostname = MAIN_DOMAIN;
+    redirectUrl.pathname = `/${defaultLocale}`;
+    return NextResponse.redirect(redirectUrl, 302);
   }
 
   // Check if path has locale
   const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
-  
+
   // No locale in path
   if (!localeMatch) {
     // Root path: redirect to /fa/login
@@ -53,7 +56,7 @@ export default function middleware(req: NextRequest) {
       req.nextUrl.pathname = `/${defaultLocale}/login`;
       return NextResponse.redirect(req.nextUrl);
     }
-    
+
     // Other paths: rewrite to /fa/subdomain/path
     req.nextUrl.pathname = `/${defaultLocale}/${sub}${pathname}`;
     return NextResponse.rewrite(req.nextUrl);
