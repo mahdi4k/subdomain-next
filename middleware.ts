@@ -1,7 +1,7 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["porterage", "driver", "customer"];
+const allowedSubs = ["porterage", "driver", "customer","www"];
 const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "kiwipart.ir";
 const locales = ["fa", "en"];
 const defaultLocale = "fa";
