@@ -1,7 +1,7 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["car", "bike", "bus", "www"];
+const allowedSubs = ["car", "bike", "bus"];
 const defaultLocale = "fa";
 
 export default function middleware(req: NextRequest) {
@@ -34,7 +34,7 @@ export default function middleware(req: NextRequest) {
   }
 
   // Main domain handling
-  if (hostname === MAIN_DOMAIN || hostname === `www.${MAIN_DOMAIN}`) {
+  if (hostname === MAIN_DOMAIN) {
     const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
 
     // No locale in path, redirect to default locale
