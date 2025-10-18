@@ -2,14 +2,15 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const allowedSubs = ["car", "bike", "bus", "www"];
-const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "kiwipart.ir";
-const locales = ["fa", "en"];
 const defaultLocale = "fa";
 
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get("host") || "";
   const hostname = host.replace(/:\d+$/, "");
+
+  const hostParts = hostname.split(".");
+  const MAIN_DOMAIN = hostParts.length > 2 ? hostParts.slice(-2).join(".") : hostname;
 
   // Skip static files and Next.js internals
   if (
