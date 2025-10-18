@@ -129,12 +129,23 @@ export default function middleware(req: NextRequest) {
   // --------------------------------------------------------------------------
   if (!ALLOWED_SUBDOMAINS.includes(subdomain)) {
     // Redirect disallowed subdomains to main domain
-    const redirectUrl = new URL(req.url);
-    redirectUrl.hostname = rootDomain;
-    redirectUrl.pathname = `/${DEFAULT_LOCALE}`;
-    redirectUrl.search = "";
-    if (port) redirectUrl.port = port;
-    return NextResponse.redirect(redirectUrl, 302);
+    // Build complete target URL from scratch
+    const protocol = req.nextUrl.protocol;
+    const targetHostname = rootDomain;
+    const targetPort = port ? `:${port}` : "";
+    const targetPath = `/${DEFAULT_LOCALE}`;
+    
+    // Construct full URL manually to avoid any caching issues
+    const targetUrl = `${protocol}//${targetHostname}${targetPort}${targetPath}`;
+    const currentUrl = req.url;
+    
+    // Prevent redirect loop
+    if (currentUrl.startsWith(targetUrl)) {
+      return NextResponse.next();
+    }
+    
+    // Force redirect with absolute URL
+    return NextResponse.redirect(targetUrl, 302);
   }
 
   // --------------------------------------------------------------------------
