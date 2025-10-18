@@ -1,30 +1,90 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["car", "bike", "bus"];
-const defaultLocale = "fa";
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+const ALLOWED_SUBDOMAINS = ["car", "bike", "bus"];
+const DEFAULT_LOCALE = "fa";
+const SUPPORTED_LOCALES = ["fa", "en"];
 
+// ============================================================================
+// HELPER: Extract root domain dynamically
+// ============================================================================
+function getRootDomain(hostname: string): string {
+  // Handle localhost environments
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+    return "localhost";
+  }
+
+  // Handle production domains (e.g., kiwipart.ir)
+  const parts = hostname.split(".");
+  return parts.length > 2 ? parts.slice(-2).join(".") : hostname;
+}
+
+// ============================================================================
+// HELPER: Extract subdomain from hostname
+// ============================================================================
+function extractSubdomain(request: NextRequest): string | null {
+  const host = request.headers.get("host") || "";
+  const [hostname] = host.split(":"); // Remove port
+  const lowercaseHostname = hostname.toLowerCase();
+
+  const rootDomain = getRootDomain(lowercaseHostname);
+
+  // If accessing the root domain directly, no subdomain
+  if (lowercaseHostname === rootDomain) {
+    return null;
+  }
+
+  // If accessing www.domain, treat as no subdomain
+  if (lowercaseHostname === `www.${rootDomain}`) {
+    return null;
+  }
+
+  // Extract subdomain: car.kiwipart.ir -> "car"
+  if (lowercaseHostname.endsWith(`.${rootDomain}`)) {
+    return lowercaseHostname.replace(`.${rootDomain}`, "");
+  }
+
+  return null;
+}
+
+// ============================================================================
+// HELPER: Check if path has a locale prefix
+// ============================================================================
+function getLocaleFromPath(pathname: string): {
+  locale: string | null;
+  pathWithoutLocale: string;
+} {
+  const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
+
+  if (localeMatch && SUPPORTED_LOCALES.includes(localeMatch[1])) {
+    return {
+      locale: localeMatch[1],
+      pathWithoutLocale: pathname.slice(3), // Remove /fa or /en
+    };
+  }
+
+  return {
+    locale: null,
+    pathWithoutLocale: pathname,
+  };
+}
+
+// ============================================================================
+// MAIN MIDDLEWARE
+// ============================================================================
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get("host") || "";
+  const [hostname, port] = host.split(":");
 
-  // ---------- MINIMAL CHANGE: split host into hostname + port ----------
-  const [hostnameOnly, portFromHost] = host.split(":");
-  const hostname = (hostnameOnly || "").toLowerCase();
-  const port = portFromHost || "";
-
-  const hostParts = hostname.split(".");
-  // ---------- MINIMAL CHANGE: treat localhost/*.localhost as MAIN_DOMAIN = 'localhost' ----------
-  const MAIN_DOMAIN =
-    hostname === "localhost" || hostname.endsWith(".localhost")
-      ? "localhost"
-      : hostParts.length > 2
-      ? hostParts.slice(-2).join(".")
-      : hostname;
-
-  // Skip static files and Next.js internals
+  // --------------------------------------------------------------------------
+  // 1. SKIP: Static files and Next.js internals
+  // --------------------------------------------------------------------------
   if (
-    pathname.match(/\.(.*)$/) ||
+    pathname.match(/\.(.*)$/) || // Files with extensions (.ico, .png, etc.)
     pathname === "/sw.js" ||
     pathname === "/manifest.json" ||
     pathname.startsWith("/_next/") ||
@@ -33,74 +93,71 @@ export default function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // --------------------------------------------------------------------------
+  // 2. REDIRECT: www to non-www
+  // --------------------------------------------------------------------------
   if (hostname.startsWith("www.")) {
     const target = new URL(req.url);
-    // strip the leading www.
     target.hostname = hostname.replace(/^www\./, "");
     if (port) target.port = port;
-
-    // small loop protection: if current absolute equals target absolute, do nothing
-    const currentAbs = `${new URL(req.url).origin}${new URL(req.url).pathname}${new URL(req.url).search || ""}`;
-    const targetAbs = `${target.origin}${target.pathname}${target.search || ""}`;
-    if (currentAbs === targetAbs) {
-      return NextResponse.next();
-    }
-
-    // permanent redirect to naked domain
     return NextResponse.redirect(target, 301);
   }
 
-  // Main domain handling
-  if (hostname === MAIN_DOMAIN) {
-    const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
+  const rootDomain = getRootDomain(hostname.toLowerCase());
+  const subdomain = extractSubdomain(req);
 
-    // No locale in path, redirect to default locale
-    if (!localeMatch) {
-      // use absolute URL and preserve port so dev (localhost:3000) works
+  // --------------------------------------------------------------------------
+  // 3. MAIN DOMAIN: Handle locale routing
+  // --------------------------------------------------------------------------
+  if (!subdomain) {
+    const { locale } = getLocaleFromPath(pathname);
+
+    // No locale in path, redirect to add default locale
+    if (!locale) {
       const redirectUrl = new URL(req.url);
-      redirectUrl.pathname = `/${defaultLocale}${pathname}`;
+      redirectUrl.pathname = `/${DEFAULT_LOCALE}${pathname}`;
       if (port) redirectUrl.port = port;
       return NextResponse.redirect(redirectUrl);
     }
 
+    // Locale exists, continue normally
     return NextResponse.next();
   }
 
-  // Extract subdomain
-  const sub = hostname.split(".")[0];
-
-  // Block disallowed subdomains
-  if (!allowedSubs.includes(sub)) {
+  // --------------------------------------------------------------------------
+  // 4. SUBDOMAIN: Validate allowed subdomains
+  // --------------------------------------------------------------------------
+  if (!ALLOWED_SUBDOMAINS.includes(subdomain)) {
+    // Redirect disallowed subdomains to main domain
     const redirectUrl = new URL(req.url);
-    redirectUrl.hostname = MAIN_DOMAIN;
-    if (port) redirectUrl.port = port; // preserve port in dev
-    redirectUrl.pathname = `/${defaultLocale}`;
-    redirectUrl.search = ""; // Clear any query params
+    redirectUrl.hostname = rootDomain;
+    redirectUrl.pathname = `/${DEFAULT_LOCALE}`;
+    redirectUrl.search = "";
+    if (port) redirectUrl.port = port;
     return NextResponse.redirect(redirectUrl, 302);
   }
 
-  // Check if path has locale
-  const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
+  // --------------------------------------------------------------------------
+  // 5. SUBDOMAIN: Handle locale and routing
+  // --------------------------------------------------------------------------
+  const { locale, pathWithoutLocale } = getLocaleFromPath(pathname);
 
   // No locale in path
-  if (!localeMatch) {
+  if (!locale) {
     // Root path: redirect to /fa/login
     if (pathname === "/") {
       const redirectUrl = new URL(req.url);
-      redirectUrl.pathname = `/${defaultLocale}/login`;
+      redirectUrl.pathname = `/${DEFAULT_LOCALE}/login`;
       if (port) redirectUrl.port = port;
       return NextResponse.redirect(redirectUrl);
     }
 
     // Other paths: rewrite to /fa/subdomain/path
-    req.nextUrl.pathname = `/${defaultLocale}/${sub}${pathname}`;
+    req.nextUrl.pathname = `/${DEFAULT_LOCALE}/${subdomain}${pathname}`;
     return NextResponse.rewrite(req.nextUrl);
   }
 
-  // Has locale in path
-  const locale = localeMatch[1];
-  const pathWithoutLocale = pathname.slice(3); // Remove /fa or /en
-
+  // Locale exists in path
   // Root of locale: redirect to login
   if (pathWithoutLocale === "/" || pathWithoutLocale === "") {
     const redirectUrl = new URL(req.url);
@@ -110,10 +167,14 @@ export default function middleware(req: NextRequest) {
   }
 
   // Rewrite: /fa/dashboard → /fa/subdomain/dashboard
-  req.nextUrl.pathname = `/${locale}/${sub}${pathWithoutLocale}`;
+  req.nextUrl.pathname = `/${locale}/${subdomain}${pathWithoutLocale}`;
   return NextResponse.rewrite(req.nextUrl);
 }
 
+// ============================================================================
+// MATCHER CONFIGURATION
+// ============================================================================
 export const config = {
+  // Match all paths except static files, _next internals, and favicon
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
