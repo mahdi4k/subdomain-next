@@ -1,43 +1,45 @@
 // middleware.ts
-import { type NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const ALLOWED_SUBDOMAINS = ["porterage", "driver", "customer"];
-const MAIN_DOMAIN = "kiwipart.ir";
+const allowedSubs = ["car", "bike", "bicycle"];
+const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "kiwipart.ir"; // Set in production!
 
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const hostname = req.headers.get("host")?.toLowerCase() || "";
+  const host = req.headers.get("host") || "";
 
-  // Skip static files and API routes
+  // Remove port from host (e.g., localhost:3000 → localhost)
+  const hostname = host.replace(/:\d+$/, "");
+
   if (
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/api/") ||
-    pathname.match(/\.(ico|png|jpg|jpeg|svg|css|js)$/)
+    pathname.match(/\.(.*)$/) ||
+    hostname === MAIN_DOMAIN ||
+    pathname === "/sw.js" ||
+    pathname === "/manifest.json" ||
+    pathname.startsWith("/_next/")
   ) {
     return NextResponse.next();
   }
-
-  // Extract subdomain if exists
-  const hostParts = hostname.split(".");
-  let subdomain: string | null = null;
-
-  // Check if hostname has subdomain (more than 2 parts: sub.kiwipart.ir)
-  if (hostParts.length > 2) {
-    subdomain = hostParts[0];
+  // Allow requests to main domain
+  if (hostname === MAIN_DOMAIN) {
+    return NextResponse.next();
   }
 
-  // If there's a subdomain but it's NOT in the allowed list
-  if (subdomain && !ALLOWED_SUBDOMAINS.includes(subdomain)) {
-    // Redirect to main domain
-    const url = new URL(req.url);
-    url.hostname = MAIN_DOMAIN;
-    return NextResponse.redirect(url, 302);
+  // Extract subdomain (car.example.com → car)
+  const sub = hostname.split(".")[0];
+
+  // Block disallowed subdomains
+  if (!allowedSubs.includes(sub)) {
+    return new NextResponse("Subdomain not allowed", { status: 403 });
   }
 
-  // All good, continue
-  return NextResponse.next();
+  // ✅ Redirect root path to login page (e.g., / → /car/login)
+  if (pathname === "/") {
+    req.nextUrl.pathname = `/login`;
+    return NextResponse.redirect(req.nextUrl);
+  }
+
+  // Rewrite path: /about → /car/about
+  req.nextUrl.pathname = `/${sub}${pathname}`;
+  return NextResponse.rewrite(req.nextUrl);
 }
-
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
-};
