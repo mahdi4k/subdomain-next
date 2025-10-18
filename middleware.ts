@@ -1,7 +1,7 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["porterage", "driver", "customer", "www"];
+const allowedSubs = ["car", "bike", "bus", "www"];
 const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "kiwipart.ir";
 const locales = ["fa", "en"];
 const defaultLocale = "fa";
@@ -23,7 +23,7 @@ export default function middleware(req: NextRequest) {
   }
 
   // Main domain handling
-  if (hostname === MAIN_DOMAIN) {
+  if (hostname === MAIN_DOMAIN || hostname === `www.${MAIN_DOMAIN}`) {
     const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
 
     // No locale in path, redirect to default locale
@@ -43,6 +43,7 @@ export default function middleware(req: NextRequest) {
     const redirectUrl = new URL(req.url);
     redirectUrl.hostname = MAIN_DOMAIN;
     redirectUrl.pathname = `/${defaultLocale}`;
+    redirectUrl.search = ""; // Clear any query params
     return NextResponse.redirect(redirectUrl, 302);
   }
 
