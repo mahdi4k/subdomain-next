@@ -5,11 +5,11 @@ import { headers } from "next/headers";
 
 type Props = {
   children: React.ReactNode;
-  params: { locale: string }; // server component receives plain object, not Promise
+  params: Promise<{ locale: string }>; // Define params as a Promise
 };
 
 export default async function SubLayout({ children, params }: Props) {
-  const { locale } = params;
+  const { locale } = await params; // Await the params to get the locale
   // server-side logs
   console.log("🚀 SubLayout locale:", locale, "available:", routing.locales);
 
@@ -19,7 +19,8 @@ export default async function SubLayout({ children, params }: Props) {
     const host = (await hdr).get("host") ?? "unknown-host";
     const proto = (await hdr).get("x-forwarded-proto") ?? "https";
     // x-original-uri is often set by proxies; referer/origin as fallback
-    const originalUri = (await hdr).get("x-original-uri") ?? (await hdr).get("x-invoke-path") ?? (await hdr).get("referer") ?? "";
+    const originalUri =
+      (await hdr).get("x-original-uri") ?? (await hdr).get("x-invoke-path") ?? (await hdr).get("referer") ?? "";
 
     const debug = {
       missingLocale: locale,
