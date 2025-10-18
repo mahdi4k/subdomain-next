@@ -1,7 +1,7 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["car", "bike", "bicycle"];
+const allowedSubs = ["car", "bike", "bicycle","www"];
 const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "kiwipart.ir"; // Set in production!
 
 export default function middleware(req: NextRequest) {
