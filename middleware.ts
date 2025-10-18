@@ -1,7 +1,7 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const allowedSubs = ["car", "bike", "bus", "www"];
+const allowedSubs = ["car", "bike", "bus"];
 const defaultLocale = "fa";
 
 export default function middleware(req: NextRequest) {
@@ -33,8 +33,25 @@ export default function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (hostname.startsWith("www.")) {
+    const target = new URL(req.url);
+    // strip the leading www.
+    target.hostname = hostname.replace(/^www\./, "");
+    if (port) target.port = port;
+
+    // small loop protection: if current absolute equals target absolute, do nothing
+    const currentAbs = `${new URL(req.url).origin}${new URL(req.url).pathname}${new URL(req.url).search || ""}`;
+    const targetAbs = `${target.origin}${target.pathname}${target.search || ""}`;
+    if (currentAbs === targetAbs) {
+      return NextResponse.next();
+    }
+
+    // permanent redirect to naked domain
+    return NextResponse.redirect(target, 301);
+  }
+
   // Main domain handling
-  if (hostname === MAIN_DOMAIN || hostname === `www.${MAIN_DOMAIN}`) {
+  if (hostname === MAIN_DOMAIN) {
     const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
 
     // No locale in path, redirect to default locale
