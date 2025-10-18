@@ -21,7 +21,7 @@ export default function middleware(req: NextRequest) {
   const portMatch = hostHeader.match(/:(\d+)$/);
   const port = portMatch ? portMatch[1] : "";
 
-  // Skip assets and internals
+  // Skip assets and internals - IMPORTANT: do this first
   if (
     pathname.match(/\.(.*)$/) ||
     pathname === "/sw.js" ||
@@ -32,25 +32,15 @@ export default function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const currentAbsolute = (() => {
-    const cur = new URL(req.url);
-    return `${cur.origin}${cur.pathname}${cur.search || ""}`;
-  })();
-
   // ---------- 1) handle www -> non-www ----------
   if (hostname === `www.${MAIN_DOMAIN}`) {
     const target = new URL(req.url);
     target.hostname = MAIN_DOMAIN;
     if (port) target.port = port;
-
-    const targetAbsolute = `${target.origin}${target.pathname}${target.search || ""}`;
-    if (currentAbsolute === targetAbsolute) {
-      return NextResponse.next();
-    }
     return NextResponse.redirect(target, 301);
   }
 
-  // ---------- 2) handle subdomains ----------
+  // ---------- 2) Identify subdomain ----------
   const isSubOfMain = hostname.endsWith(`.${MAIN_DOMAIN}`);
   const sub =
     isSubOfMain && hostname !== MAIN_DOMAIN ? hostname.slice(0, hostname.length - `.${MAIN_DOMAIN}`.length) : undefined;
@@ -60,78 +50,85 @@ export default function middleware(req: NextRequest) {
     const target = new URL(req.url);
     target.hostname = MAIN_DOMAIN;
     if (port) target.port = port;
-    // Keep the current path instead of forcing /fa
-    // If user was on /en/something, they stay on /en/something
-
-    const targetAbsolute = `${target.origin}${target.pathname}${target.search || ""}`;
-    if (currentAbsolute === targetAbsolute) {
-      return NextResponse.next();
-    }
+    // Don't modify pathname - let next-intl handle locale on main domain
     return NextResponse.redirect(target, 302);
   }
 
-  // ---------- 3) main domain handling ----------
+  // ---------- 3) Main domain handling ----------
   const isMainDomain = hostname === MAIN_DOMAIN;
-  if (isMainDomain) {
-    // Simply let next-intl handle ALL paths on main domain
-    // It will handle locale detection and routing
-    return intlMiddleware(req);
-  }
 
-  // ---------- 4) subdomain + locale routing ----------
-  if (sub) {
+  if (isMainDomain) {
     const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
 
+    // If no locale in path, redirect to default locale
     if (!localeMatch) {
-      const intlResponse = intlMiddleware(req);
-      const newPathname = intlResponse.headers.get("x-middleware-request") || req.nextUrl.pathname;
-      const newLocaleMatch = newPathname.match(/^\/([a-z]{2})(\/|$)/);
-      const detectedLocale = newLocaleMatch ? newLocaleMatch[1] : "fa";
-
       if (pathname === "/") {
         const target = new URL(req.url);
-        target.pathname = `/${detectedLocale}/login`;
+        target.pathname = "/fa";
         if (port) target.port = port;
-        const targetAbsolute = `${target.origin}${target.pathname}${target.search || ""}`;
-        if (currentAbsolute === targetAbsolute) return NextResponse.next();
+        return NextResponse.redirect(target, 302);
+      }
+
+      // Add default locale to path
+      const target = new URL(req.url);
+      target.pathname = `/fa${pathname}`;
+      if (port) target.port = port;
+      return NextResponse.redirect(target, 302);
+    }
+
+    // Has locale, continue normally
+    return NextResponse.next();
+  }
+
+  // ---------- 4) Valid subdomain handling ----------
+  if (sub && allowedSubs.includes(sub)) {
+    const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
+
+    // No locale in path
+    if (!localeMatch) {
+      // For root path, redirect to /fa/login
+      if (pathname === "/") {
+        const target = new URL(req.url);
+        target.pathname = "/fa/login";
+        if (port) target.port = port;
         const response = NextResponse.redirect(target, 302);
         response.headers.set("x-subdomain", sub);
         return response;
       }
 
-      req.nextUrl.pathname = `/${detectedLocale}/${sub}${pathname}`;
+      // For other paths without locale, add default locale and rewrite with subdomain
+      req.nextUrl.pathname = `/fa/${sub}${pathname}`;
       const response = NextResponse.rewrite(req.nextUrl);
       response.headers.set("x-subdomain", sub);
       return response;
     }
 
+    // Has locale in path
     const locale = localeMatch[1];
-    const pathWithoutLocale = pathname.slice(3);
+    const pathWithoutLocale = pathname.slice(3); // Remove /fa or /en
 
-    if (pathWithoutLocale === "/" || pathname === `/${locale}`) {
+    // If at root of locale (e.g., /fa or /fa/), redirect to login
+    if (pathWithoutLocale === "/" || pathWithoutLocale === "") {
       const target = new URL(req.url);
-      target.pathname = `/${locale}/${sub}/login`;
+      target.pathname = `/${locale}/login`;
       if (port) target.port = port;
-      const targetAbsolute = `${target.origin}${target.pathname}${target.search || ""}`;
-      if (currentAbsolute === targetAbsolute) return NextResponse.next();
       const response = NextResponse.redirect(target, 302);
       response.headers.set("x-subdomain", sub);
       return response;
     }
 
+    // Rewrite path to include subdomain for app router
     req.nextUrl.pathname = `/${locale}/${sub}${pathWithoutLocale}`;
     const response = NextResponse.rewrite(req.nextUrl);
     response.headers.set("x-subdomain", sub);
     return response;
   }
 
-  // Fallback for unknown hosts
+  // Fallback: unknown host, redirect to main domain
   const fallback = new URL(req.url);
   fallback.hostname = MAIN_DOMAIN;
   if (port) fallback.port = port;
-  fallback.pathname = "/fa";
-  const fallbackAbsolute = `${fallback.origin}${fallback.pathname}${fallback.search || ""}`;
-  if (currentAbsolute === fallbackAbsolute) return NextResponse.next();
+  // Don't set pathname, let next-intl handle it
   return NextResponse.redirect(fallback, 302);
 }
 
