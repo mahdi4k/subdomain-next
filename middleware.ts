@@ -32,18 +32,21 @@ export default function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ---------- 1) handle www -> non-www ----------
-  if (hostname === `www.${MAIN_DOMAIN}`) {
+  // ---------- 1) Redirect non-www to www ----------
+  const mainWithoutWww = MAIN_DOMAIN.replace(/^www\./, ''); // kiwipart.ir
+  
+  if (hostname === mainWithoutWww) {
     const target = new URL(req.url);
-    target.hostname = MAIN_DOMAIN;
+    target.hostname = MAIN_DOMAIN; // www.kiwipart.ir
     if (port) target.port = port;
     return NextResponse.redirect(target, 301);
   }
 
   // ---------- 2) Identify subdomain ----------
   const isSubOfMain = hostname.endsWith(`.${MAIN_DOMAIN}`);
-  const sub =
-    isSubOfMain && hostname !== MAIN_DOMAIN ? hostname.slice(0, hostname.length - `.${MAIN_DOMAIN}`.length) : undefined;
+  const sub = isSubOfMain && hostname !== MAIN_DOMAIN 
+    ? hostname.slice(0, hostname.length - (`.${MAIN_DOMAIN}`).length) 
+    : undefined;
 
   // If subdomain exists but NOT in allowed list, redirect to main domain
   if (sub && !allowedSubs.includes(sub)) {
@@ -56,10 +59,10 @@ export default function middleware(req: NextRequest) {
 
   // ---------- 3) Main domain handling ----------
   const isMainDomain = hostname === MAIN_DOMAIN;
-
+  
   if (isMainDomain) {
     const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
-
+    
     // If no locale in path, redirect to default locale
     if (!localeMatch) {
       if (pathname === "/") {
@@ -68,14 +71,14 @@ export default function middleware(req: NextRequest) {
         if (port) target.port = port;
         return NextResponse.redirect(target, 302);
       }
-
+      
       // Add default locale to path
       const target = new URL(req.url);
       target.pathname = `/fa${pathname}`;
       if (port) target.port = port;
       return NextResponse.redirect(target, 302);
     }
-
+    
     // Has locale, continue normally
     return NextResponse.next();
   }
