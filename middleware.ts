@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
 
-const allowedSubs = ["porterage", "driver", "customer"];
+const allowedSubs = ["porterage", "driver", "customer","www"];
 const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "kiwipart.ir"; // set in Vercel env or fallback
 
 // next-intl middleware instance
