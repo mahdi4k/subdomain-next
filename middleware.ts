@@ -3,7 +3,7 @@ import createMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
 
 const allowedSubs = ["porterage", "driver", "customer"];
-const MAIN_DOMAIN = process.env.MAIN_DOMAIN || "localhost";
+const MAIN_DOMAIN = "kiwipart.ir"; // Updated to your domain
 
 // Create the next-intl middleware
 const intlMiddleware = createMiddleware(routing);
